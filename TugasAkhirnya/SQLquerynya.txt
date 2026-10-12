@@ -1,0 +1,163 @@
+SQL Query
+
+Tabel kf_final_trx
+SELECT transaction_id AS `kode id transaksi`, date AS `tanggal transaksi dilakukan` 
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` LIMIT 1000
+
+Tabel kf_kantor_cabang
+SELECT branch_id AS `kode id cabang KF`, branch_name AS `nama cabang KF`, kota AS `kota cabang KF`, provinsi AS `provinsi cabang KF`, rating AS `penilaian konsumen terhadap cabang KF`
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_kantor_cabang` LIMIT 1000
+
+Tabel Name Customer
+SELECT customer_name AS `Nama customer yang melakukan transaksi`
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` LIMIT 1000
+
+Tabel Produk Obat
+SELECT product_id AS `kode produk obat`, product_name AS `nama obat`, price AS `harga obat aktual` 
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_product` LIMIT 1000
+
+Tabel diskon harga obat
+SELECT  CONCAT(ROUND(discount_percentage * 100), '%') AS `Presentasi diskon diberikan pada obat`
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` LIMIT 1000
+
+Tabel Presentasi gross laba
+SELECT 
+  product_id,
+  price,
+  CASE 
+    WHEN price <= 50000 THEN '10%'
+    WHEN price > 50000 AND price <= 100000 THEN '15%'
+    WHEN price > 100000 AND price <= 300000 THEN '20%'
+    WHEN price > 300000 AND price <= 500000 THEN '25'
+    WHEN price > 500000 THEN '35'
+  END AS Persentase_gross_laba
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` LIMIT 1000
+
+Tabel Nett sales
+SELECT 
+  product_id,
+  price,
+  discount_percentage,
+  CAST(ROUND(price - (price * discount_percentage)) AS INT64) AS `harga setelah diskon`
+FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` LIMIT 1000
+
+Tabel Net Profit
+WITH perhitungan_awal AS (
+  SELECT 
+    product_id,
+    price,
+    discount_percentage,
+    CAST(ROUND(price - (price * discount_percentage)) AS INT64) AS nett_sales,
+    CASE 
+      WHEN price <= 50000 THEN 0.10
+      WHEN price > 50000 AND price <= 100000 THEN 0.15
+      WHEN price > 100000 AND price <= 300000 THEN 0.20
+      WHEN price > 300000 AND price <= 500000 THEN 0.25
+      WHEN price > 500000 THEN 0.30
+    END AS persentase_laba
+  FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction`
+)
+
+SELECT 
+  product_id,
+  price,
+  discount_percentage,
+  nett_sales,
+  persentase_laba,
+  CAST(ROUND(nett_sales * persentase_laba) AS INT64) AS nett_profit
+FROM perhitungan_awal
+
+- Menampilkan Tabel Rating transactiion
+WITH perhitungan_awal AS (
+  SELECT 
+    product_id,
+    price,
+    discount_percentage,
+    rating,
+    CAST(ROUND(price - (price * discount_percentage)) AS INT64) AS nett_sales,
+    CASE 
+      WHEN price <= 50000 THEN 0.10
+      WHEN price > 50000 AND price <= 100000 THEN 0.15
+      WHEN price > 100000 AND price <= 300000 THEN 0.20
+      WHEN price > 300000 AND price <= 500000 THEN 0.25
+      WHEN price > 500000 THEN 0.30
+    END AS persentase_laba
+  FROM `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction`
+)
+
+SELECT 
+  product_id,
+  price,
+  discount_percentage,
+  nett_sales,
+  persentase_laba,
+  CAST(ROUND(nett_sales * persentase_laba) AS INT64) AS nett_profit,
+  rating
+FROM perhitungan_awal
+
+- Menampilkan Tabel YOY Revenue Difference
+WITH YearlyRevenue AS (
+  SELECT 
+    EXTRACT(YEAR FROM date) AS transaction_year,
+    SUM(price) AS total_revenue -- Ganti 'price' dengan kolom yang merepresentasikan pendapatan (misal: nett_sales)
+  FROM 
+    `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction`
+  GROUP BY 
+    transaction_year
+)
+SELECT 
+  transaction_year,
+  total_revenue,
+  LAG(total_revenue) OVER (ORDER BY transaction_year) AS previous_year_revenue,
+  total_revenue - LAG(total_revenue) OVER (ORDER BY transaction_year) AS revenue_difference,
+  ROUND(
+    ((total_revenue - LAG(total_revenue) OVER (ORDER BY transaction_year)) / 
+    NULLIF(LAG(total_revenue) OVER (ORDER BY transaction_year), 0)) * 100, 
+  2) AS yoy_growth_percentage
+FROM 
+  YearlyRevenue
+ORDER BY 
+  transaction_year;
+
+- Menampilkan Tabel Top10 Nett Sales
+SELECT 
+  branch_id, 
+  SUM(CAST(ROUND(price - (price * discount_percentage)) AS INT64)) AS total_net_sales
+FROM 
+  `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction`
+GROUP BY 
+  branch_id
+ORDER BY 
+  total_net_sales DESC
+LIMIT 10;
+
+-Menampilkan tabel TopTenBranch Trx
+SELECT 
+  c.provinsi, 
+  COUNT(t.transaction_id) AS jumlah_transaksi, 
+  SUM(t.price) AS total_pendapatan 
+FROM 
+  `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` t
+JOIN 
+  `careful-acumen-510622-j0.kimia_farma01.kf_kantor_cabang` c
+ON 
+  t.branch_id = c.branch_id 
+GROUP BY 
+  c.provinsi
+ORDER BY 
+  total_pendapatan DESC 
+LIMIT 10;
+
+- Menampilkan Tabel Profit masing2 Provinsi
+SELECT  
+  c.provinsi,
+  CONCAT(ROUND(SUM(t.price) / 1000000, 2), ' Juta') AS total_profit
+FROM 
+  `careful-acumen-510622-j0.kimia_farma01.kf_kantor_cabang` AS c
+JOIN
+  `careful-acumen-510622-j0.kimia_farma01.kf_final_transaction` AS t
+  ON c.branch_id = t.branch_id
+GROUP BY
+  c.provinsi
+ORDER BY
+  SUM(t.price) DESC;
